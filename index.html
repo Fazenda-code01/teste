@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CHATSTARKER</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #000;
+  color: #888;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1px;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#chat {
+  width: 680px;
+  max-width: 98vw;
+  border: 1px solid #1a1a1a;
+  padding: 28px;
+  background: #030303;
+}
+#header {
+  color: #00eaff;
+  font-size: 11px;
+  letter-spacing: 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #111;
+  padding-bottom: 12px;
+}
+#messages {
+  height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-bottom: 16px;
+}
+#messages::-webkit-scrollbar { width: 4px; }
+#messages::-webkit-scrollbar-track { background: #000; }
+#messages::-webkit-scrollbar-thumb { background: #1a1a1a; }
+.user {
+  color: #ffffff;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.bot {
+  color: #00eaff;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+.loading {
+  color: #333;
+  font-size: 12px;
+  letter-spacing: 3px;
+  animation: blink 1s step-end infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+#input-row {
+  display: flex;
+  align-items: center;
+  border-top: 1px solid #111;
+  padding-top: 12px;
+  gap: 8px;
+}
+#prompt {
+  color: #00eaff;
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  letter-spacing: 1px;
+  outline: none;
+}
+input::placeholder { color: #333; }
+</style>
+</head>
+<body>
+<div id="chat">
+  <div id="header">CHATSTARKER // SISTEMA DE TRIAGEM</div>
+  <div id="messages"></div>
+  <div id="input-row">
+    <span id="prompt">&gt;</span>
+    <input id="input" placeholder="Digite sua mensagem..." autocomplete="off" />
+  </div>
+</div>
+<script>
+const input = document.getElementById("input");
+const messages = document.getElementById("messages");
+const history = [];
+
+function scrollToBottom() {
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function addMessage(role, text) {
+  const div = document.createElement("div");
+  div.className = role === "user" ? "user" : "bot";
+  div.textContent = role === "user" ? "> " + text : text;
+  messages.appendChild(div);
+  scrollToBottom();
+  return div;
+}
+
+// Mensagem inicial
+addMessage("bot", "CHATSTARKER ONLINE\n\nProtocolo de triagem iniciado.\n\nInforme:\n- Nicho\n- Tempo de operação\n- Faturamento mensal");
+
+input.addEventListener("keypress", async (e) => {
+  if (e.key !== "Enter") return;
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  input.disabled = true;
+
+  addMessage("user", text);
+  history.push({ role: "user", parts: [{ text }] });
+
+  const loadingEl = document.createElement("div");
+  loadingEl.className = "loading";
+  loadingEl.textContent = "PROCESSANDO...";
+  messages.appendChild(loadingEl);
+  scrollToBottom();
+
+  try {
+    const res = await fetch("/api/index", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, history })
+    });
+
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    loadingEl.remove();
+
+    const reply = data.reply || "Sem resposta do servidor.";
+    addMessage("bot", reply);
+    history.push({ role: "model", parts: [{ text: reply }] });
+
+  } catch (err) {
+    loadingEl.remove();
+    addMessage("bot", "ERRO DE CONEXÃO. Verifique o servidor.");
+    console.error(err);
+  }
+
+  input.disabled = false;
+  input.focus();
+});
+
+input.focus();
+</script>
+</body>
+</html>
