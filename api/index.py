@@ -4,7 +4,7 @@ import re
 import os
 from http.server import BaseHTTPRequestHandler
 
-API_KEY = os.getenv("GEMINI_API_KEY")
+API_KEY = os.getenv("GROQ_API_KEY")
 
 SYSTEM_PROMPT = """Você é o CHATSTARKER, Unidade de Qualificação de Elite da Consultoria STARKER.
 
@@ -56,46 +56,40 @@ class handler(BaseHTTPRequestHandler):
                 self._send_json({"reply": reply})
                 return
 
-            # Monta histórico para o Gemini
-            contents = []
+            # Monta mensagens no formato OpenAI (compatível com Groq)
+            messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-            # Injeta o system prompt como primeira mensagem do model
-            contents.append({
-                "role": "user",
-                "parts": [{"text": "Leia e siga estas instruções:\n\n" + SYSTEM_PROMPT}]
-            })
-            contents.append({
-                "role": "model",
-                "parts": [{"text": "Entendido. Sou o CHATSTARKER. Irei seguir o protocolo de triagem."}]
-            })
-
-            # Adiciona histórico da conversa (ignora a última mensagem do usuário que já vem em user_message)
+            # Adiciona histórico (ignora última entrada que já vem em user_message)
             for item in history[:-1]:
                 role = item.get("role", "user")
                 parts = item.get("parts", [])
-                if role in ("user", "model") and parts:
-                    contents.append({"role": role, "parts": parts})
+                if role == "model":
+                    role = "assistant"
+                if role in ("user", "assistant") and parts:
+                    content = parts[0].get("text", "") if parts else ""
+                    if content:
+                        messages.append({"role": role, "content": content})
 
-            # Adiciona a mensagem atual
-            contents.append({
-                "role": "user",
-                "parts": [{"text": user_message}]
-            })
+            # Mensagem atual
+            messages.append({"role": "user", "content": user_message})
 
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={API_KEY}"
+            url = "https://api.groq.com/openai/v1/chat/completions"
             payload = {
-                "contents": contents,
-                "generationConfig": {
-                    "temperature": 0.7,
-                    "maxOutputTokens": 512
-                }
+                "model": "llama-3.3-70b-versatile",
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": 512
             }
 
-            response = requests.post(url, json=payload, timeout=15)
+            response = requests.post(url, json=payload, headers={
+                "Authorization": f"Bearer {API_KEY}",
+                "Content-Type": "application/json"
+            }, timeout=15)
+
             result = response.json()
 
             try:
-                reply = result["candidates"][0]["content"]["parts"][0]["text"]
+                reply = result["choices"][0]["message"]["content"]
             except (KeyError, IndexError):
                 error_info = result.get("error", {}).get("message", "Erro desconhecido")
                 reply = f"Erro na matriz de inteligência: {error_info}"
